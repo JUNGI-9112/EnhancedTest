@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>차원의 균열: 마스터 크래프터 - Polished Prototype</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #0d1117; color: #c9d1d9; overflow: hidden; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #161b22; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
+        
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-8px);
+            background-color: #161b22; color: #f0f6fc; padding: 8px 12px; border-radius: 6px;
+            font-size: 0.875rem; white-space: pre-wrap; z-index: 11000; border: 1px solid #30363d;
+            pointer-events: none; width: max-content; max-width: 300px;
+        }
+        
+        .toast {
+            position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%);
+            background-color: #161b22; color: #f0f6fc; padding: 12px 24px;
+            border-radius: 8px; border-top: 3px solid #58a6ff; z-index: 9999;
+            transition: all 0.5s ease-in-out; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        
+        .screen { display: none; }
+        .screen.active { display: flex; }
+        
+        .rarity-normal-text { color: #9ca3af !important; }
+        .rarity-rare-text { color: #3b82f6 !important; }
+        .rarity-epic-text { color: #8b5cf6 !important; }
+        .rarity-legendary-text { color: #f59e0b !important; }
+        .rarity-mythic-text { color: #ef4444 !important; }
+
+        .item-card.rarity-mythic { animation: mythic-glow 2s infinite; }
+        
+        @keyframes mythic-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+        }
+        
+        .boss-health-bar {
+            width: 100%; height: 30px; background: #1a1a1a; border: 2px solid #30363d;
+            border-radius: 15px; overflow: hidden; position: relative;
+        }
+        
+        .boss-health-fill {
+            height: 100%; background: linear-gradient(90deg, #dc2626, #ef4444);
+            transition: width 0.3s ease-out;
+        }
+        
+        .damage-number {
+            position: absolute; color: #fbbf24; font-weight: bold; font-size: 24px;
+            animation: damage-float 1s ease-out forwards; pointer-events: none;
+        }
+        
+        @keyframes damage-float {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center select-none">
+
+    <div id="game-container" class="w-full max-w-7xl h-full max-h-[900px] flex flex-col p-4 gap-4 relative">
+
+        <!-- 상단 헤더 -->
+        <header class="flex justify-between items-center p-2 bg-black bg-opacity-20 rounded-md gap-4">
+            <div class="flex items-center flex-shrink-0">
+                <div id="player-level-icon" class="w-12 h-12 bg-indigo-500 rounded-full mr-4 flex items-center justify-center text-lg font-bold">1</div>
+                <div>
+                    <span class="text-sm text-gray-400">마스터 크래프터</span>
+                    <div class="w-32 md:w-48 h-4 bg-gray-700 rounded-full mt-1 relative">
+                        <div id="player-exp-bar" class="h-full bg-indigo-500 rounded-full transition-all duration-500" style="width: 0%;"></div>
+                        <div id="player-exp-text" class="absolute inset-0 text-xs text-center text-white/80 leading-4">0 / 100</div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-4 gap-y-2 text-center">
+                <div data-tooltip="가이아 차원 보스 처치 시 획득"><div id="resource-gaia-special" class="font-bold text-green-400">0</div><span class="text-xs text-gray-500">생명의 정수</span></div>
+                <div data-tooltip="헤파이스토스 차원 보스 처치 시 획득"><div id="resource-hephaestus-special" class="font-bold text-red-400">0</div><span class="text-xs text-gray-500">티타늄 합금</span></div>
+                <div data-tooltip="헤르메스 차원 보스 처치 시 획득"><div id="resource-hermes-special" class="font-bold text-purple-400">0</div><span class="text-xs text-gray-500">영혼의 파편</span></div>
+                <div data-tooltip="티케 차원 보스 처치 시 획득"><div id="resource-tyche-special" class="font-bold text-blue-400">0</div><span class="text-xs text-gray-500">암호화폐</span></div>
+                <div data-tooltip="차원 환상 시 획득"><div id="resource-prestige" class="font-bold text-yellow-400">0</div><span class="text-xs text-gray-500">균열의 정수</span></div>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 영역 -->
+        <main class="flex flex-grow gap-4 min-h-0">
+            <!-- 좌측 차원 탭 -->
+            <nav id="dimension-tabs" class="flex flex-col gap-4">
+                <button class="w-16 h-16 md:w-20 md:h-20 bg-green-500 bg-opacity-20 border-2 border-green-500 rounded-lg flex items-center justify-center text-3xl transition-all" data-dimension="gaia" data-tooltip="가이아: 생명의 요람"><i class="fa-solid fa-leaf"></i></button>
+                <button class="w-16 h-16 md:w-20 md:h-20 bg-gray-700 rounded-lg flex items-center justify-center text-3xl text-gray-500 transition-all opacity-50" data-dimension="hephaestus" data-tooltip="헤파이스토스: 강철의 심장"><i class="fa-solid fa-cogs"></i></button>
+                <button class="w-16 h-16 md:w-20 md:h-20 bg-gray-700 rounded-lg flex items-center justify-center text-3xl text-gray-500 transition-all opacity-50" data-dimension="hermes" data-tooltip="헤르메스: 비전의 서고"><i class="fa-solid fa-book-open"></i></button>
+                <button class="w-16 h-16 md:w-20 md:h-20 bg-gray-700 rounded-lg flex items-center justify-center text-3xl text-gray-500 transition-all opacity-50" data-dimension="tyche" data-tooltip="티케: 네온의 그림자"><i class="fa-solid fa-network-wired"></i></button>
+            </nav>
+
+            <div id="main-content-area" class="flex-grow bg-black bg-opacity-20 rounded-md p-4 flex flex-col relative">
+                 <!-- 캔버스 및 파티클 컨테이너 -->
+                <div id="canvas-container" class="absolute inset-0 pointer-events-none z-0">
+                    <canvas id="game-canvas" class="w-full h-full"></canvas>
+                </div>
+                <!-- 메인 게임 화면 -->
+                <div id="main-screen" class="screen active h-full flex-col">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h3 id="dimension-name" class="text-2xl font-bold text-green-400">가이아: 생명의 요람</h3>
+                            <p id="dimension-trait" class="text-sm text-gray-400">고유 특성: 강화 성공 시 5% 확률로 희귀도 상승</p>
+                            <p class="text-sm text-gray-400">총 생산력: <span id="total-production" class="font-bold text-white">0</span> / 초</p>
+                        </div>
+                        <div id="production-info" class="text-right">
+                            <p>1티어 아이템: <span id="item-production" class="font-bold text-white">0</span> / 초</p>
+                            <p id="resource-production-name">생명의 잎새: <span class="font-bold text-white">0</span></p>
+                            <button id="auto-equip-btn" onclick="autoEquip()" class="mt-2 text-xs text-blue-400 hover:text-blue-200 transition-colors"><i class="fa fa-wand-magic-sparkles mr-1"></i>최적 장착</button>
+                        </div>
+                    </div>
+                    <div class="w-full h-px bg-gray-700 my-2"></div>
+                    <div class="flex-grow w-full h-full flex flex-col min-h-0">
+                         <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-sm font-bold text-gray-400 flex-shrink-0">장착 슬롯</h4>
+                            <p id="inventory-info" class="text-sm text-gray-400">보유 아이템: 0 / 500</p>
+                        </div>
+                        <div id="equipment-grid" class="w-full grid grid-cols-6 grid-rows-2 gap-2.5 flex-shrink-0 h-[calc(50%-1rem)]"></div>
+                        <h4 class="text-sm font-bold text-gray-400 my-2 flex-shrink-0">인벤토리</h4>
+                        <div id="inventory-panel" class="flex-grow grid grid-cols-8 gap-2 overflow-y-auto pr-2 min-h-0 h-[calc(50%-1rem)]"></div>
+                    </div>
+                </div>
+
+                <!-- 강화 화면 -->
+                <div id="enhance-screen" class="screen h-full flex-col">
+                    <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                        <h2 class="text-3xl font-bold">수동 강화 / 제작</h2>
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="같은 아이템 2개를 합쳐 상위 아이템 1개를 만듭니다.&#10;아이템을 클릭하여 강화하거나, 슬롯에 있는 아이템을 드래그하여 합칠 수 있습니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                            <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                        </div>
+                    </div>
+                    <div id="enhance-item-list" class="flex-grow grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 overflow-y-auto pr-2"></div>
+                </div>
+                
+                <!-- 보스 화면 -->
+                <div id="boss-screen" class="screen h-full flex-col">
+                    <div class="absolute top-4 right-4 flex items-center gap-4">
+                        <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="각 차원의 강력한 보스에게 도전하여 특별한 보상을 획득하세요.&#10;보스를 처치해야 다음 단계로 나아갈 수 있습니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                        <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                    </div>
+                    <div class="p-8 w-full">
+                        <h2 class="text-3xl font-bold mb-6 text-center">차원 보스 전투</h2>
+                        <div id="boss-content" class="space-y-6"></div>
+                    </div>
+                </div>
+                
+                <!-- 마스터리 화면 -->
+                <div id="mastery-screen" class="screen h-full flex-col">
+                    <div class="absolute top-4 right-4 flex items-center gap-4">
+                        <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="레벨업 시 획득하는 마스터리 포인트로 영구적인 특성을 강화하세요.&#10;다양한 특성 조합으로 자신만의 성장 전략을 만들 수 있습니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                        <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                    </div>
+                    <div class="p-8 w-full">
+                        <h2 class="text-3xl font-bold mb-2 text-center">마스터리 트리</h2>
+                        <p class="text-center text-gray-400 mb-6">보유 포인트: <span id="mastery-points" class="text-yellow-400 font-bold">0</span></p>
+                        <div id="mastery-tree" class="grid grid-cols-3 gap-6 max-w-4xl mx-auto"></div>
+                    </div>
+                </div>
+                
+                <!-- 환상 화면 -->
+                <div id="prestige-screen" class="screen h-full flex-col">
+                    <div class="absolute top-4 right-4 flex items-center gap-4">
+                        <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="차원의 최종 보스를 처치한 후 '환상'을 진행할 수 있습니다.&#10;환상 시 해당 차원의 진행도는 초기화되지만,&#10;모든 차원에 적용되는 강력한 영구 보너스를 얻습니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                        <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                    </div>
+                    <div class="p-8 text-center">
+                        <h2 class="text-3xl font-bold mb-6">차원 환상</h2>
+                        <div id="prestige-info" class="space-y-4"></div>
+                    </div>
+                </div>
+                
+                <!-- 자동 강화 화면 -->
+                <div id="auto-enhance-screen" class="screen h-full flex-col">
+                    <div class="absolute top-4 right-4 flex items-center gap-4">
+                        <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="특정 조건을 설정하여 아이템 강화를 자동화하세요.&#10;게임을 꺼도 자동으로 작동하여 효율적인 성장을 돕습니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                        <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                    </div>
+                    <div class="p-8 w-full">
+                        <h2 class="text-3xl font-bold mb-6 text-center">자동 강화 설정</h2>
+                        <div id="auto-enhance-settings" class="max-w-2xl mx-auto space-y-6"></div>
+                    </div>
+                </div>
+                
+                <!-- 설정 화면 -->
+                <div id="settings-screen" class="screen h-full flex-col">
+                    <div class="absolute top-4 right-4 flex items-center gap-4">
+                        <div class="w-8 h-8 flex items-center justify-center text-gray-400" data-tooltip="게임 데이터 저장, 불러오기, 초기화 등 다양한 설정을 관리합니다."><i class="fa-solid fa-circle-question text-2xl"></i></div>
+                        <button class="screen-close-btn text-gray-400 hover:text-white"><i class="fa fa-times text-2xl"></i></button>
+                    </div>
+                    <div class="p-8 w-full">
+                        <h2 class="text-3xl font-bold mb-6 text-center">설정</h2>
+                        <div class="max-w-sm mx-auto space-y-4">
+                            <button onclick="saveGame(true)" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-md transition-colors"><i class="fa fa-save mr-2"></i>게임 저장</button>
+                            <button onclick="exportSave()" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-md transition-colors"><i class="fa fa-download mr-2"></i>세이브 내보내기</button>
+                            <button onclick="importSave()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-6 rounded-md transition-colors"><i class="fa fa-upload mr-2"></i>세이브 불러오기</button>
+                            <button onclick="resetGame()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-md transition-colors"><i class="fa fa-trash mr-2"></i>게임 초기화</button>
+                            <div class="pt-4 text-sm text-gray-400 text-center">
+                                <p>자동 저장: 30초마다</p>
+                                <p>버전: 2.0.0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 하단 메뉴 -->
+        <footer id="footer-menu" class="grid grid-cols-6 gap-2 md:gap-4">
+            <button class="bg-gray-800 h-20 rounded-md text-center hover:bg-gray-700 transition-colors flex flex-col items-center justify-center" data-tooltip="보유한 아이템 목록을 보고 수동으로 강화합니다." data-screen-id="enhance-screen"><i class="fa fa-hammer block text-2xl mb-1"></i><span class="text-xs md:text-sm">강화</span></button>
+            <button class="bg-gray-800 h-20 rounded-md text-center hover:bg-gray-700 transition-colors flex flex-col items-center justify-center" data-tooltip="현재 차원의 보스에게 도전합니다." data-screen-id="boss-screen"><i class="fa fa-dragon block text-2xl mb-1"></i><span class="text-xs md:text-sm">보스</span></button>
+            <button class="bg-gray-800 h-20 rounded-md text-center hover:bg-gray-700 transition-colors flex flex-col items-center justify-center" data-tooltip="마스터리 포인트를 투자하여 영구 능력치를 상승시킵니다." data-screen-id="mastery-screen"><i class="fa fa-sitemap block text-2xl mb-1"></i><span class="text-xs md:text-sm">마스터리</span></button>
+            <button class="bg-yellow-800 hover:bg-yellow-700 h-20 rounded-md text-center text-white transition-colors flex flex-col items-center justify-center" data-tooltip="현재 차원을 초기화하고 영구 보너스를 획득합니다." data-screen-id="prestige-screen"><i class="fa fa-sync-alt block text-2xl mb-1"></i><span class="text-xs md:text-sm">환상</span></button>
+            <button id="auto-enhance-btn" class="bg-gray-800 h-20 rounded-md text-center hover:bg-gray-700 transition-colors flex flex-col items-center justify-center relative" data-tooltip="자동 강화 규칙을 설정합니다." data-screen-id="auto-enhance-screen">
+                <i class="fa fa-robot block text-2xl mb-1"></i>
+                <span class="text-xs md:text-sm">자동 강화</span>
+                <span id="auto-enhance-indicator" class="absolute top-2 right-2 w-2 h-2 bg-gray-500 rounded-full"></span>
+            </button>
+            <button class="bg-gray-800 h-20 rounded-md text-center hover:bg-gray-700 transition-colors flex flex-col items-center justify-center" data-tooltip="게임 설정 및 저장/초기화" data-screen-id="settings-screen"><i class="fa fa-cog block text-2xl mb-1"></i><span class="text-xs md:text-sm">설정</span></button>
+        </footer>
+    </div>
+    
+    <!-- 토스트 컨테이너 -->
+    <div id="toast-container"></div>
+
+    <script>
+    // ===================================================================================
+    // 게임 설정 및 상수
+    // ===================================================================================
+    const TICK_RATE = 50;
+    const LOGIC_TICK_RATE = 100;
+    const SAVE_INTERVAL = 30000;
+    const MAX_SLOTS = 12;
+    const MAX_TIER = 50;
+    const MAX_LEVEL = 20;
+
+    const DIMENSIONS = {
+        gaia: { 
+            name: '가이아: 생명의 요람', 
+            color: '#238636',
+            trait: '강화 성공 시 5% 확률로 희귀도 상승',
+            resourceName: '생명의 잎새'
+        },
+        hephaestus: { 
+            name: '헤파이스토스: 강철의 심장', 
+            color: '#da3633',
+            trait: '1티어 아이템 생산량 2배, 강화 재화 소모 20% 증가',
+            resourceName: '티타늄 광석'
+        },
+        hermes: { 
+            name: '헤르메스: 비전의 서고', 
+            color: '#8957e5',
+            trait: '강화 성공 시 경험치 +20%',
+            resourceName: '지식의 서적'
+        },
+        tyche: { 
+            name: '티케: 네온의 그림자', 
+            color: '#1f6feb',
+            trait: '오프라인 시 생산 효율 +25%',
+            resourceName: '데이터 코인'
+        }
+    };
+
+    const RARITY_CONFIG = {
+        0: { name: '노말', color: '#9ca3af', multiplier: 1 },
+        1: { name: '레어', color: '#3b82f6', multiplier: 2 },
+        2: { name: '에픽', color: '#8b5cf6', multiplier: 5 },
+        3: { name: '레전더리', color: '#f59e0b', multiplier: 20 },
+        4: { name: '신화', color: '#ef4444', multiplier: 100 }
+    };
+    
+    const ITEMS = {};
+    for (const dim in DIMENSIONS) {
+        ITEMS[dim] = Array.from({length: MAX_TIER}, (_, i) => ({
+            name: `${dim.charAt(0).toUpperCase() + dim.slice(1)} T${i+1}`,
+            baseProd: Math.pow(2.5, i) * (i + 1)
+        }));
+    }
+
+    const ENHANCE_CHANCE = Array.from({length: MAX_LEVEL + 1}, (_, i) => Math.max(0.01, 1 - (i * 0.045)));
+
+    const BOSSES = {
+        gaia: [
+            { name: '세계수의 수호자', hp: 1000, reward: 10 },
+            { name: '대지의 거인', hp: 5000, reward: 50 },
+            { name: '생명의 어머니', hp: 25000, reward: 250 },
+            { name: '가이아의 화신', hp: 125000, reward: 1250 },
+            { name: '태초의 씨앗', hp: 625000, reward: 6250 }
+        ],
+        hephaestus: [
+            { name: '강철 골렘', hp: 1500, reward: 15 },
+            { name: '용암 거인', hp: 7500, reward: 75 },
+            { name: '대장간의 주인', hp: 37500, reward: 375 },
+            { name: '헤파이스토스의 망치', hp: 187500, reward: 1875 },
+            { name: '영원의 화로', hp: 937500, reward: 9375 }
+        ],
+        hermes: [
+            { name: '지식의 수호자', hp: 1200, reward: 12 },
+            { name: '비전의 현자', hp: 6000, reward: 60 },
+            { name: '시간의 서고관', hp: 30000, reward: 300 },
+            { name: '헤르메스의 깃펜', hp: 150000, reward: 1500 },
+            { name: '운명의 서적', hp: 750000, reward: 7500 }
+        ],
+        tyche: [
+            { name: '데이터 스파이더', hp: 1800, reward: 18 },
+            { name: '네트워크 드래곤', hp: 9000, reward: 90 },
+            { name: '사이버 타이탄', hp: 45000, reward: 450 },
+            { name: '티케의 주사위', hp: 225000, reward: 2250 },
+            { name: '양자 특이점', hp: 1125000, reward: 11250 }
+        ]
+    };
+
+    const MASTERY_TREE = [
+        { id: 'production', name: '생산력 증폭', maxLevel: 10, perLevel: 0.1, cost: level => level + 1, description: '모든 차원 생산력 +10%' },
+        { id: 'enhance', name: '강화 마스터', maxLevel: 10, perLevel: 0.05, cost: level => level + 1, description: '강화 성공률 +5%' },
+        { id: 'offline', name: '오프라인 효율', maxLevel: 10, perLevel: 0.1, cost: level => level + 1, description: '오프라인 생산 효율 +10%' },
+        { id: 'rarity', name: '희귀도 상승', maxLevel: 5, perLevel: 0.02, cost: level => (level + 1) * 2, description: '희귀도 상승 확률 +2%' },
+        { id: 'boss', name: '보스 킬러', maxLevel: 10, perLevel: 0.15, cost: level => level + 1, description: '보스 대미지 +15%' },
+        { id: 'exp', name: '경험의 달인', maxLevel: 10, perLevel: 0.1, cost: level => level + 1, description: '경험치 획득량 +10%' }
+    ];
+
+    // ===================================================================================
+    // 게임 상태
+    // ===================================================================================
+    let gameState = {};
+    let currentDimension = 'gaia';
+    let particles = [];
+    let autoEnhanceInterval = null;
+    let bossInterval = null;
+
+    function createNewGameState() {
+        const dimensionsData = {};
+        for (const dim in DIMENSIONS) {
+            dimensionsData[dim] = {
+                items: {},
+                slots: Array(MAX_SLOTS).fill(null),
+                baseResource: 0,
+                specialResource: 0,
+                bossLevel: 0,
+                bossCurrentHp: 0,
+                prestigeCount: 0,
+                unlocked: dim === 'gaia',
+                autoEnhance: {
+                    enabled: false,
+                    targetLevel: 10,
+                    rarityProtection: 2,
+                    minStock: 2,
+                    speed: 1
+                }
+            };
+        }
+        return {
+            player: {
+                level: 1,
+                exp: 0,
+                masteryPoints: 0,
+                masteryLevels: {}
+            },
+            dimensions: dimensionsData,
+            prestige: {
+                points: 0,
+                permanentBonus: 0
+            },
+            stats: {
+                totalPlayTime: 0,
+                totalEnhances: 0,
+                totalBossKills: 0
+            },
+            settings: {
+                autoSave: true,
+                soundEnabled: false
+            },
+            lastUpdate: Date.now(),
+            lastSave: Date.now()
+        };
+    }
+
+    // ===================================================================================
+    // 유틸리티 함수
+    // ===================================================================================
+    function formatNumber(n) {
+        if(!n || n < 1) return '0';
+        if (n < 1e3) return n.toFixed(0);
+        if (n < 1e6) return (n / 1e3).toFixed(1) + "K";
+        if (n < 1e9) return (n / 1e6).toFixed(2) + "M";
+        if (n < 1e12) return (n / 1e9).toFixed(2) + "B";
+        if (n < 1e15) return (n / 1e12).toFixed(2) + "T";
+        return n.toExponential(2);
+    }
+
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        const color = type === 'success' ? '#238636' : type === 'error' ? '#da3633' : type === 'warning' ? '#f59e0b' : '#58a6ff';
+        toast.style.borderTopColor = color;
+        document.getElementById('toast-container').appendChild(toast);
+        setTimeout(() => { toast.style.bottom = '20px'; }, 10);
+        setTimeout(() => {
+            toast.style.bottom = '-100px';
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
+    function createParticles(x, y, color) {
+        const rect = document.getElementById('canvas-container').getBoundingClientRect();
+        for (let i = 0; i < 20; i++) {
+            const [r, g, b] = hexToRgb(color);
+            particles.push({
+                x: x - rect.left,
+                y: y - rect.top,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                life: 50,
+                size: Math.random() * 3 + 1,
+                r, g, b,
+                opacity: 1
+            });
+        }
+    }
+    
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [88, 166, 255];
+    }
+
+    // ===================================================================================
+    // 핵심 게임 로직
+    // ===================================================================================
+    function gameLoop() {
+        const canvas = document.getElementById('game-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.1;
+            p.life--;
+            p.opacity = p.life / 50;
+            ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.opacity})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        requestAnimationFrame(gameLoop);
+    }
+    
+    function logicTick() {
+        if (!gameState || !gameState.lastUpdate) return;
+        const now = Date.now();
+        const delta = (now - gameState.lastUpdate) / 1000;
+        
+        // 오프라인 시간 계산
+        if (delta > 2) {
+            processOfflineProgress(delta);
+        }
+        
+        // 각 차원별 생산 계산
+        for (const dimId in DIMENSIONS) {
+            const dim = gameState.dimensions[dimId];
+            if (!dim.unlocked) continue;
+            
+            let totalProduction = 0;
+            dim.slots.forEach(slot => {
+                if(slot) totalProduction += calculateItemProduction(dimId, slot);
+            });
+            
+            // 마스터리 보너스 적용
+            const masteryBonus = 1 + (gameState.player.masteryLevels.production || 0) * 0.1;
+            // 환상 보너스 적용
+            const prestigeBonus = 1 + gameState.prestige.permanentBonus;
+            
+            totalProduction *= masteryBonus * prestigeBonus;
+            
+            // 헤파이스토스 특성: 1티어 아이템 생산량 2배
+            let itemProd = (totalProduction / 10) + 1;
+            if (dimId === 'hephaestus') {
+                itemProd *= 2;
+            }
+            
+            // 티케 특성: 오프라인 효율 증가 (온라인에서도 약간 적용)
+            if (dimId === 'tyche') {
+                totalProduction *= 1.05;
+            }
+            
+            const resourceProd = totalProduction + 1;
+            
+            // 아이템 및 자원 생산
+            addItem(dimId, { tier: 0, level: 0, rarity: 0 }, itemProd * delta);
+            dim.baseResource += resourceProd * delta;
+        }
+        
+        // 자동 배치
+        autoPlaceItems();
+        
+        // 자동 강화 체크
+        for (const dimId in DIMENSIONS) {
+            processAutoEnhance(dimId);
+        }
+
+        // 보스 자동 공격
+        if (document.getElementById('boss-screen').classList.contains('active')) {
+             checkAndApplyPassiveDamage();
+        }
+        
+        gameState.stats.totalPlayTime += delta;
+        gameState.lastUpdate = now;
+        updateUI();
+
+        // 강화 화면이 활성화된 경우 아이템 목록 실시간 업데이트
+        if (document.getElementById('enhance-screen').classList.contains('active')) {
+            populateEnhanceScreen();
+        }
+    }
+    
+    function processOfflineProgress(seconds) {
+        const offlineBonus = 0.5 + (gameState.player.masteryLevels.offline || 0) * 0.1;
+        
+        for (const dimId in DIMENSIONS) {
+            const dim = gameState.dimensions[dimId];
+            if (!dim.unlocked) continue;
+            
+            let efficiency = offlineBonus;
+            // 티케 차원은 오프라인 효율 25% 추가
+            if (dimId === 'tyche') {
+                efficiency += 0.25;
+            }
+            
+            let totalProduction = 0;
+            dim.slots.forEach(slot => {
+                if(slot) totalProduction += calculateItemProduction(dimId, slot);
+            });
+            
+            const offlineProduction = totalProduction * efficiency * seconds;
+            dim.baseResource += offlineProduction;
+        }
+        
+        showToast(`오프라인 보상: ${formatNumber(seconds)}초 동안의 생산량을 획득했습니다!`, 'success');
+    }
+    
+    function autoPlaceItems() {
+        for (const dimId in DIMENSIONS) {
+            const dim = gameState.dimensions[dimId];
+            if (!dim.unlocked) continue;
+            
+            const t0ItemKey = '0-0-0';
+            while((dim.items[t0ItemKey] || 0) >= 1) {
+                const emptySlotIndex = dim.slots.indexOf(null);
+                if (emptySlotIndex !== -1) {
+                    if (removeItem(dimId, {tier: 0, level: 0, rarity: 0}, 1)) {
+                        dim.slots[emptySlotIndex] = {tier: 0, level: 0, rarity: 0};
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    
+    function processAutoEnhance(dimId) {
+        const dim = gameState.dimensions[dimId];
+        if (!dim.unlocked || !dim.autoEnhance.enabled) return;
+        
+        const speedMultiplier = parseInt(dim.autoEnhance.speed);
+        
+        for (let i = 0; i < speedMultiplier; i++) {
+            const items = Object.entries(dim.items);
+            for (const [key, count] of items) {
+                if (count < 2) continue;
+                
+                const [tier, level, rarity] = key.split('-').map(Number);
+                const item = { tier, level, rarity };
+                
+                // 조건 체크
+                if (level >= dim.autoEnhance.targetLevel) continue;
+                if (rarity >= dim.autoEnhance.rarityProtection) continue;
+                if (count <= dim.autoEnhance.minStock) continue;
+                
+                // 강화 시도
+                handleEnhance(dimId, item, true);
+            }
+        }
+    }
+    
+    function handleEnhance(dimension, item, isAuto = false) {
+        const dim = gameState.dimensions[dimension];
+        
+        // 헤파이스토스 특성: 강화 재화 소모 20% 증가 (구현 예정)
+        const requiredCount = dimension === 'hephaestus' ? 2.4 : 2;
+        
+        if (removeItem(dimension, item, requiredCount)) {
+            // 마스터리 보너스 적용
+            const masteryBonus = (gameState.player.masteryLevels.enhance || 0) * 0.05;
+            const successChance = Math.min(0.95, (ENHANCE_CHANCE[item.level] || 0.1) + masteryBonus);
+            
+            const success = Math.random() < successChance;
+            
+            if (success) {
+                let newItem = { ...item };
+                newItem.level++;
+                
+                // 레벨이 최대치에 도달하면 티어 상승
+                if (newItem.level > MAX_LEVEL && item.tier < MAX_TIER - 1) {
+                    newItem.tier++;
+                    newItem.level = 0;
+                }
+                
+                // 가이아 특성: 5% 확률로 희귀도 상승
+                if (dimension === 'gaia' && Math.random() < 0.05) {
+                    if (newItem.rarity < 4) {
+                        newItem.rarity++;
+                        showToast(`희귀도 상승! ${RARITY_CONFIG[newItem.rarity].name}`, 'success');
+                    }
+                }
+                
+                // 희귀도 상승 마스터리
+                const rarityChance = (gameState.player.masteryLevels.rarity || 0) * 0.02;
+                if (Math.random() < rarityChance && newItem.rarity < 4) {
+                    newItem.rarity++;
+                    showToast(`마스터리 효과로 희귀도 상승!`, 'success');
+                }
+                
+                addItem(dimension, newItem, 1);
+                
+                // 경험치 획득
+                let expGain = (item.tier + 1) * (item.level + 1) * (item.rarity + 1);
+                
+                // 헤르메스 특성: 경험치 20% 추가
+                if (dimension === 'hermes') {
+                    expGain *= 1.2;
+                }
+                
+                // 마스터리 보너스
+                expGain *= 1 + (gameState.player.masteryLevels.exp || 0) * 0.1;
+                
+                gainExp(expGain);
+                
+                gameState.stats.totalEnhances++;
+                
+                if (!isAuto) {
+                    showToast(`강화 성공! +${newItem.level}`, 'success');
+                }
+                
+                return newItem;
+            } else {
+                addItem(dimension, item, 1);
+                if (!isAuto) {
+                    showToast(`강화 실패...`, 'error');
+                }
+                return null;
+            }
+        }
+        return null;
+    }
+    
+    function gainExp(amount) {
+        gameState.player.exp += amount;
+        const requiredExp = getRequiredExp(gameState.player.level);
+        
+        while (gameState.player.exp >= requiredExp) {
+            gameState.player.exp -= requiredExp;
+            gameState.player.level++;
+            gameState.player.masteryPoints++;
+            showToast(`레벨 업! Lv.${gameState.player.level} 달성! 마스터리 포인트 +1`, 'success');
+            
+            // 차원 해금
+            if (gameState.player.level === 5) {
+                gameState.dimensions.hephaestus.unlocked = true;
+                showToast('헤파이스토스 차원이 해금되었습니다!', 'success');
+            } else if (gameState.player.level === 10) {
+                gameState.dimensions.hermes.unlocked = true;
+                showToast('헤르메스 차원이 해금되었습니다!', 'success');
+                // 자동 강화 해금
+                document.getElementById('auto-enhance-btn').classList.remove('opacity-50');
+            } else if (gameState.player.level === 20) {
+                gameState.dimensions.tyche.unlocked = true;
+                showToast('티케 차원이 해금되었습니다!', 'success');
+            }
+        }
+    }
+    
+    function getRequiredExp(level) {
+        return Math.floor(Math.pow(level, 1.5) * 100);
+    }
+    
+    function calculateItemProduction(dim, item) {
+        const base = ITEMS[dim][item.tier].baseProd;
+        const levelMultiplier = item.level + 1;
+        const rarityMultiplier = RARITY_CONFIG[item.rarity].multiplier;
+        return base * levelMultiplier * rarityMultiplier;
+    }
+    
+    function addItem(dim, item, count = 1) {
+        const key = `${item.tier}-${item.level}-${item.rarity}`;
+        gameState.dimensions[dim].items[key] = (gameState.dimensions[dim].items[key] || 0) + count;
+    }
+    
+    function removeItem(dim, item, count = 1) {
+        const key = `${item.tier}-${item.level}-${item.rarity}`;
+        if (gameState.dimensions[dim].items[key] >= count) {
+            gameState.dimensions[dim].items[key] -= count;
+            if (gameState.dimensions[dim].items[key] < 0.01) {
+                delete gameState.dimensions[dim].items[key];
+            }
+            return true;
+        }
+        return false;
+    }
+
+    // ===================================================================================
+    // 보스 시스템
+    // ===================================================================================
+    function initBossSystem() {
+        const content = document.getElementById('boss-content');
+        content.innerHTML = '';
+        
+        const dim = gameState.dimensions[currentDimension];
+        const bossList = BOSSES[currentDimension];
+        
+        if (!bossList || dim.bossLevel >= bossList.length) {
+            content.innerHTML = '<p class="text-center text-gray-400">모든 보스를 처치했습니다!</p>';
+            return;
+        }
+        
+        const currentBoss = bossList[dim.bossLevel];
+        
+        // 보스 체력 초기화
+        if (dim.bossCurrentHp <= 0) {
+            dim.bossCurrentHp = currentBoss.hp;
+        }
+        
+        const bossHtml = `
+            <div class="text-center">
+                <h3 class="text-2xl font-bold mb-2" style="color: ${DIMENSIONS[currentDimension].color}">
+                    ${currentBoss.name}
+                </h3>
+                <p class="text-gray-400 mb-4">레벨 ${dim.bossLevel + 1} 보스</p>
+                <div class="boss-health-bar mb-4">
+                    <div class="boss-health-fill" style="width: ${(dim.bossCurrentHp / currentBoss.hp) * 100}%"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-white font-bold">
+                        ${formatNumber(dim.bossCurrentHp)} / ${formatNumber(currentBoss.hp)}
+                    </div>
+                </div>
+                <button onclick="manualAttackBoss()" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-md transition-colors">
+                    <i class="fa fa-fist-raised mr-2"></i>공격하기
+                </button>
+                <p class="text-sm text-gray-400 mt-4">
+                    보상: ${DIMENSIONS[currentDimension].name.split(': ')[0]} 정수 x${currentBoss.reward}
+                </p>
+            </div>
+        `;
+        
+        content.innerHTML = bossHtml;
+    }
+    
+    function manualAttackBoss() {
+        const dim = gameState.dimensions[currentDimension];
+        const bossList = BOSSES[currentDimension];
+        
+        if (!bossList || dim.bossLevel >= bossList.length) return;
+        
+        const currentBoss = bossList[dim.bossLevel];
+        
+        // 대미지 계산
+        let damage = 1;
+        // 생산력 기반 대미지
+        dim.slots.forEach(slot => {
+            if(slot) damage += calculateItemProduction(currentDimension, slot) / 10;
+        });
+        
+        // 마스터리 보너스
+        damage *= 1 + (gameState.player.masteryLevels.boss || 0) * 0.15;
+        
+        applyDamageToBoss(damage);
+    }
+
+    function checkAndApplyPassiveDamage() {
+        const bossScreen = document.getElementById('boss-screen');
+        if (!bossScreen.classList.contains('active')) {
+            return;
+        }
+
+        const dim = gameState.dimensions[currentDimension];
+        const bossList = BOSSES[currentDimension];
+        if (!bossList || dim.bossLevel >= bossList.length) return;
+
+        let totalProduction = 0;
+        dim.slots.forEach(slot => {
+            if(slot) totalProduction += calculateItemProduction(currentDimension, slot);
+        });
+        
+        const passiveDamage = totalProduction / 1000;
+        applyDamageToBoss(passiveDamage);
+    }
+
+    function applyDamageToBoss(damage) {
+        const dim = gameState.dimensions[currentDimension];
+        const bossList = BOSSES[currentDimension];
+        const currentBoss = bossList[dim.bossLevel];
+        dim.bossCurrentHp = Math.max(0, dim.bossCurrentHp - damage);
+
+        const bossArea = document.querySelector('#boss-screen');
+        if (bossArea) {
+            const dmgText = document.createElement('div');
+            dmgText.className = 'damage-number';
+            dmgText.textContent = formatNumber(damage);
+            dmgText.style.left = Math.random() * 80 + 10 + '%';
+            dmgText.style.top = Math.random() * 80 + 10 + '%';
+            bossArea.appendChild(dmgText);
+            setTimeout(() => dmgText.remove(), 1000);
+        }
+
+        if (dim.bossCurrentHp <= 0) {
+            dim.specialResource += currentBoss.reward;
+            dim.bossLevel++;
+            gameState.stats.totalBossKills++;
+            
+            showToast(`${currentBoss.name} 처치! 보상 획득!`, 'success');
+            
+            gainExp(currentBoss.hp / 10);
+            
+            if (dim.bossLevel < bossList.length) {
+                dim.bossCurrentHp = bossList[dim.bossLevel].hp;
+            }
+            
+            initBossSystem();
+        } else {
+            const healthBar = document.querySelector('.boss-health-fill');
+            if (healthBar) {
+                healthBar.style.width = `${(dim.bossCurrentHp / currentBoss.hp) * 100}%`;
+            }
+            const healthText = document.querySelector('.boss-health-bar .absolute');
+            if (healthText) {
+                healthText.innerHTML = `${formatNumber(dim.bossCurrentHp)} / ${formatNumber(currentBoss.hp)}`;
+            }
+        }
+        updateUI();
+    }
+
+
+    // ===================================================================================
+    // 마스터리 시스템
+    // ===================================================================================
+    function initMasteryTree() {
+        const container = document.getElementById('mastery-tree');
+        container.innerHTML = '';
+        
+        MASTERY_TREE.forEach(node => {
+            const currentLevel = gameState.player.masteryLevels[node.id] || 0;
+            const cost = node.cost(currentLevel);
+            const canUpgrade = currentLevel < node.maxLevel && gameState.player.masteryPoints >= cost;
+            
+            const nodeHtml = `
+                <div class="bg-gray-800 rounded-lg p-4 text-center ${canUpgrade ? 'hover:bg-gray-700 cursor-pointer' : 'opacity-50'}">
+                    <h4 class="font-bold mb-2">${node.name}</h4>
+                    <p class="text-sm text-gray-400 mb-2">${node.description}</p>
+                    <p class="text-lg font-bold ${currentLevel > 0 ? 'text-yellow-400' : ''}">
+                        ${currentLevel} / ${node.maxLevel}
+                    </p>
+                    ${currentLevel < node.maxLevel ? `
+                        <button onclick="upgradeMastery('${node.id}')" 
+                                class="mt-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-1 rounded text-sm"
+                                ${!canUpgrade ? 'disabled' : ''}>
+                            업그레이드 (${cost} 포인트)
+                        </button>
+                    ` : '<span class="text-green-400 text-sm">MAX</span>'}
+                </div>
+            `;
+            
+            container.innerHTML += nodeHtml;
+        });
+        
+        document.getElementById('mastery-points').textContent = gameState.player.masteryPoints;
+    }
+    
+    function upgradeMastery(nodeId) {
+        const node = MASTERY_TREE.find(n => n.id === nodeId);
+        if (!node) return;
+        
+        const currentLevel = gameState.player.masteryLevels[nodeId] || 0;
+        const cost = node.cost(currentLevel);
+        
+        if (currentLevel >= node.maxLevel || gameState.player.masteryPoints < cost) {
+            return;
+        }
+        
+        gameState.player.masteryPoints -= cost;
+        gameState.player.masteryLevels[nodeId] = currentLevel + 1;
+        
+        showToast(`${node.name} 업그레이드! (Lv.${currentLevel + 1})`, 'success');
+        initMasteryTree();
+        updateUI();
+    }
+
+    // ===================================================================================
+    // 환상 시스템
+    // ===================================================================================
+    function initPrestigeScreen() {
+        const container = document.getElementById('prestige-info');
+        const dim = gameState.dimensions[currentDimension];
+        const bossList = BOSSES[currentDimension];
+        
+        const canPrestige = dim.bossLevel >= bossList.length;
+        const prestigeGain = calculatePrestigeGain();
+        
+        container.innerHTML = `
+            <div class="bg-gray-800 rounded-lg p-6 max-w-md mx-auto">
+                <p class="text-lg mb-4">
+                    현재 차원: <span style="color: ${DIMENSIONS[currentDimension].color}" class="font-bold">
+                        ${DIMENSIONS[currentDimension].name}
+                    </span>
+                </p>
+                <p class="mb-4">
+                    환상 횟수: <span class="text-yellow-400 font-bold">${dim.prestigeCount}</span>
+                </p>
+                <p class="mb-4">
+                    예상 균열의 정수: <span class="text-yellow-400 font-bold">+${formatNumber(prestigeGain)}</span>
+                </p>
+                <p class="mb-6 text-sm text-gray-400">
+                    환상 시 이 차원의 진행도는 초기화되지만,<br>
+                    모든 차원에 적용되는 강력한 영구 보너스를 얻습니다.
+                </p>
+                ${canPrestige ? `
+                    <button onclick="performPrestige()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-6 rounded-md transition-colors">
+                        <i class="fa fa-sync-alt mr-2"></i>환상 실행
+                    </button>
+                ` : `
+                    <p class="text-red-400 text-center">
+                        모든 보스를 처치해야 환상을 실행할 수 있습니다.
+                    </p>
+                `}
+            </div>
+        `;
+    }
+    
+    function calculatePrestigeGain() {
+        const dim = gameState.dimensions[currentDimension];
+        let gain = 0;
+        
+        // 보스 진행도 기반
+        gain += dim.bossLevel * 10;
+        
+        // 특수 자원 기반
+        gain += Math.floor(Math.log10(dim.specialResource + 1)) * 5;
+        
+        // 환상 횟수 보너스
+        gain *= Math.pow(1.5, dim.prestigeCount);
+        
+        return Math.floor(gain);
+    }
+    
+    function performPrestige() {
+        if (!confirm('정말로 환상을 실행하시겠습니까? 이 차원의 진행도가 초기화됩니다.')) {
+            return;
+        }
+        
+        const prestigeGain = calculatePrestigeGain();
+        gameState.prestige.points += prestigeGain;
+        gameState.prestige.permanentBonus += prestigeGain * 0.01;
+        
+        // 차원 초기화
+        const dim = gameState.dimensions[currentDimension];
+        dim.items = {};
+        dim.slots = Array(MAX_SLOTS).fill(null);
+        dim.baseResource = 0;
+        dim.bossLevel = 0;
+        dim.bossCurrentHp = 0;
+        dim.prestigeCount++;
+        
+        showToast(`환상 완료! 균열의 정수 +${formatNumber(prestigeGain)}`, 'success');
+        showToast(`영구 생산력 보너스: +${(gameState.prestige.permanentBonus * 100).toFixed(0)}%`, 'success');
+        
+        updateUI();
+        showScreen('main-screen');
+    }
+
+    // ===================================================================================
+    // 자동 강화 시스템
+    // ===================================================================================
+    function initAutoEnhanceSettings() {
+        const container = document.getElementById('auto-enhance-settings');
+        const dim = gameState.dimensions[currentDimension];
+        
+        container.innerHTML = `
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <label class="text-lg">자동 강화 활성화</label>
+                    <button onclick="toggleAutoEnhance()" class="w-20 h-10 rounded-full ${dim.autoEnhance.enabled ? 'bg-green-500' : 'bg-gray-600'} transition-colors">
+                        <span class="block w-8 h-8 bg-white rounded-full transition-transform ${dim.autoEnhance.enabled ? 'translate-x-10' : 'translate-x-1'}"></span>
+                    </button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">강화 속도</label>
+                        <input type="range" min="1" max="10" value="${dim.autoEnhance.speed}"
+                               onchange="updateAutoEnhanceSetting('speed', this.value)"
+                               class="w-full">
+                        <span class="text-yellow-400">${dim.autoEnhance.speed}배</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">최대 강화 레벨</label>
+                        <input type="range" min="1" max="${MAX_LEVEL}" value="${dim.autoEnhance.targetLevel}"
+                               onchange="updateAutoEnhanceSetting('targetLevel', this.value)"
+                               class="w-full">
+                        <span class="text-yellow-400">${dim.autoEnhance.targetLevel}</span>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">희귀도 보호 (이상 보호)</label>
+                        <select onchange="updateAutoEnhanceSetting('rarityProtection', this.value)"
+                                class="bg-gray-700 text-white px-4 py-2 rounded w-full">
+                            <option value="0" ${dim.autoEnhance.rarityProtection === 0 ? 'selected' : ''}>보호 안함</option>
+                            <option value="1" ${dim.autoEnhance.rarityProtection === 1 ? 'selected' : ''}>레어 이상</option>
+                            <option value="2" ${dim.autoEnhance.rarityProtection === 2 ? 'selected' : ''}>에픽 이상</option>
+                            <option value="3" ${dim.autoEnhance.rarityProtection === 3 ? 'selected' : ''}>레전더리 이상</option>
+                            <option value="4" ${dim.autoEnhance.rarityProtection === 4 ? 'selected' : ''}>신화만</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">최소 재고 유지</label>
+                        <input type="number" min="0" max="100" value="${dim.autoEnhance.minStock}"
+                               onchange="updateAutoEnhanceSetting('minStock', this.value)"
+                               class="bg-gray-700 text-white px-4 py-2 rounded w-full">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function toggleAutoEnhance() {
+        const dim = gameState.dimensions[currentDimension];
+        dim.autoEnhance.enabled = !dim.autoEnhance.enabled;
+        
+        const indicator = document.getElementById('auto-enhance-indicator');
+        if (indicator) {
+            indicator.className = `absolute top-2 right-2 w-2 h-2 rounded-full ${dim.autoEnhance.enabled ? 'bg-green-400' : 'bg-gray-500'}`;
+        }
+        
+        showToast(dim.autoEnhance.enabled ? '자동 강화 활성화' : '자동 강화 비활성화', 'info');
+        initAutoEnhanceSettings();
+    }
+    
+    function updateAutoEnhanceSetting(setting, value) {
+        if (setting === 'speed') {
+            gameState.dimensions[currentDimension].autoEnhance[setting] = parseInt(value);
+        } else {
+            gameState.dimensions[currentDimension].autoEnhance[setting] = parseInt(value);
+        }
+        initAutoEnhanceSettings();
+    }
+
+    // ===================================================================================
+    // UI 및 렌더링
+    // ===================================================================================
+    function draw() {
+        const equipmentGrid = document.getElementById('equipment-grid');
+        const inventoryPanel = document.getElementById('inventory-panel');
+        if (!equipmentGrid || !inventoryPanel || !gameState.dimensions) return;
+        
+        equipmentGrid.innerHTML = '';
+        inventoryPanel.innerHTML = '';
+        
+        const dim = gameState.dimensions[currentDimension];
+
+        // 장착 슬롯 렌더링
+        dim.slots.forEach((item, index) => {
+            const cell = document.createElement('div');
+            cell.className = 'bg-black bg-opacity-20 border-2 border-[#30363d] rounded-lg relative min-h-[96px]';
+            cell.dataset.slotIndex = index;
+            cell.dataset.droppable = 'true';
+            if (item) {
+                cell.appendChild(createItemElement(item, `slot-${index}`));
+            } else {
+                const plusIcon = document.createElement('i');
+                plusIcon.className = 'fa fa-plus text-gray-500 text-2xl absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2';
+                cell.appendChild(plusIcon);
+            }
+            equipmentGrid.appendChild(cell);
+        });
+
+        // 인벤토리 렌더링
+        const items = gameState.dimensions[currentDimension].items;
+        const sortedKeys = Object.keys(items).sort((a,b)=>{ const [tA, lA, rA] = a.split('-').map(Number); const [tB, lB, rB] = b.split('-').map(Number); return tB - tA || lB - lA || rB - rA;});
+        
+        for (const key of sortedKeys) {
+            const count = Math.floor(items[key]);
+            if (count > 0) {
+                 const [tier, level, rarity] = key.split('-').map(Number);
+                 inventoryPanel.appendChild(createItemElement({ tier, level, rarity, count }, `inventory-${key}`));
+            }
+        }
+    }
+    
+    function autoEquip() {
+        const dim = gameState.dimensions[currentDimension];
+        const allItems = [];
+
+        // 장착된 아이템 목록
+        dim.slots.forEach(slot => {
+            if (slot) allItems.push(slot);
+        });
+
+        // 인벤토리 아이템 목록
+        for (const key in dim.items) {
+            const [tier, level, rarity] = key.split('-').map(Number);
+            const count = Math.floor(dim.items[key]);
+            for (let i = 0; i < count; i++) {
+                allItems.push({ tier, level, rarity });
+            }
+        }
+
+        // 생산력 기준으로 아이템 정렬
+        allItems.sort((a, b) => {
+            return calculateItemProduction(currentDimension, b) - calculateItemProduction(currentDimension, a);
+        });
+
+        // 상위 12개 아이템으로 슬롯 채우기
+        const bestItems = allItems.slice(0, MAX_SLOTS);
+        const newSlots = Array(MAX_SLOTS).fill(null);
+
+        // 기존 아이템을 인벤토리로 이동
+        dim.slots.forEach(slot => {
+            if (slot) {
+                addItem(currentDimension, slot, 1);
+            }
+        });
+        dim.slots = newSlots;
+
+        // 최적 아이템을 슬롯에 장착
+        bestItems.forEach((item, index) => {
+            if (removeItem(currentDimension, item, 1)) {
+                dim.slots[index] = item;
+            }
+        });
+
+        showToast('최적 아이템으로 자동 장착되었습니다!', 'success');
+        updateUI();
+    }
+
+    function createItemElement(item, identifier) {
+        const rarityData = RARITY_CONFIG[item.rarity];
+        const el = document.createElement('div');
+        el.className = `w-full h-full p-1 rounded-md cursor-pointer flex flex-col justify-center items-center text-center transition-transform duration-200 select-none border-2 rarity-${rarityData.name.toLowerCase()}`;
+        el.style.backgroundColor = '#161b22';
+        el.draggable = true;
+        el.dataset.itemKey = `${item.tier}-${item.level}-${item.rarity}`;
+        el.dataset.source = identifier.includes('slot') ? 'slot' : 'inventory';
+        el.dataset.id = identifier;
+
+        let contentHtml = `
+            <div class="font-bold leading-tight" style="color: ${rarityData.color}; font-size: 0.8rem;">
+                T${item.tier + 1}+${item.level}
+            </div>
+            <div class="text-xs text-gray-400 mt-1">${rarityData.name}</div>
+            <div class="text-xs text-gray-500">
+                ${formatNumber(calculateItemProduction(currentDimension, item))}/s
+            </div>
+        `;
+        
+        if (item.count > 1) {
+            contentHtml += `<div class="absolute bottom-1 right-1 text-xs bg-gray-900 bg-opacity-70 px-1 rounded-sm">${item.count}</div>`;
+        }
+        
+        el.innerHTML = contentHtml;
+        return el;
+    }
+
+    function updateUI() {
+        if (!gameState || !gameState.player) return;
+        
+        // 플레이어 정보
+        document.getElementById('player-level-icon').textContent = gameState.player.level;
+        const requiredExp = getRequiredExp(gameState.player.level);
+        document.getElementById('player-exp-bar').style.width = `${Math.min(100, (gameState.player.exp / requiredExp) * 100)}%`;
+        document.getElementById('player-exp-text').textContent = `${formatNumber(gameState.player.exp)} / ${formatNumber(requiredExp)}`;
+        
+        // 특수 자원
+        for(const dimId in DIMENSIONS) {
+            document.getElementById(`resource-${dimId}-special`).textContent = formatNumber(gameState.dimensions[dimId].specialResource);
+        }
+        document.getElementById('resource-prestige').textContent = formatNumber(gameState.prestige.points);
+        
+        // 생산력 계산
+        const dim = gameState.dimensions[currentDimension];
+        let totalProduction = 0;
+        dim.slots.forEach(slot => {
+            if(slot) totalProduction += calculateItemProduction(currentDimension, slot);
+        });
+        
+        const masteryBonus = 1 + (gameState.player.masteryLevels.production || 0) * 0.1;
+        const prestigeBonus = 1 + gameState.prestige.permanentBonus;
+        totalProduction *= masteryBonus * prestigeBonus;
+        
+        document.getElementById('total-production').textContent = formatNumber(totalProduction);
+        
+        let itemProd = (totalProduction / 10) + 1;
+        if (currentDimension === 'hephaestus') {
+            itemProd *= 2;
+        }
+        
+        document.getElementById('item-production').textContent = formatNumber(itemProd);
+        document.getElementById('resource-production-name').innerHTML = `${DIMENSIONS[currentDimension].resourceName}: <span class="font-bold text-white">${formatNumber(dim.baseResource)}</span>`;
+        
+        // 인벤토리 정보
+        let totalItems = 0;
+        Object.values(dim.items).forEach(count => totalItems += count);
+        document.getElementById('inventory-info').textContent = `보유 아이템: ${Math.floor(totalItems)} / 500`;
+        
+        // 차원별 특성 표시
+        document.getElementById('dimension-trait').textContent = `고유 특성: ${DIMENSIONS[currentDimension].trait}`;
+        
+        // 자동 강화 인디케이터
+        updateAutoEnhanceIndicator();
+        
+        draw();
+    }
+    
+    function updateAutoEnhanceIndicator() {
+        const indicator = document.getElementById('auto-enhance-indicator');
+        if (!indicator) return;
+        
+        let anyEnabled = false;
+        for (const dimId in DIMENSIONS) {
+            if (gameState.dimensions[dimId].autoEnhance.enabled) {
+                anyEnabled = true;
+                break;
+            }
+        }
+        
+        indicator.className = `absolute top-2 right-2 w-2 h-2 rounded-full ${anyEnabled ? 'bg-green-400' : 'bg-gray-500'}`;
+    }
+    
+    function switchDimension(dimId) {
+        if (!gameState.dimensions[dimId].unlocked) {
+            showToast('이 차원은 아직 잠겨있습니다.', 'warning');
+            return;
+        }
+        
+        currentDimension = dimId;
+        document.querySelectorAll('nav button[data-dimension]').forEach(btn => {
+            const isSelected = btn.dataset.dimension === dimId;
+            const isUnlocked = gameState.dimensions[btn.dataset.dimension].unlocked;
+            
+            btn.classList.toggle('bg-opacity-20', isSelected && isUnlocked);
+            btn.classList.toggle('border-2', isSelected && isUnlocked);
+            btn.classList.toggle('bg-gray-700', !isSelected || !isUnlocked);
+            btn.classList.toggle('text-gray-500', !isSelected || !isUnlocked);
+            btn.classList.toggle('opacity-50', !isUnlocked);
+            btn.style.borderColor = isSelected && isUnlocked ? DIMENSIONS[dimId].color : 'transparent';
+        });
+        
+        const dimConfig = DIMENSIONS[dimId];
+        document.getElementById('dimension-name').textContent = dimConfig.name;
+        document.getElementById('dimension-name').style.color = dimConfig.color;
+        updateUI();
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('#main-content-area .screen').forEach(s => s.classList.remove('active'));
+        const targetScreen = document.getElementById(screenId);
+        if (targetScreen) {
+            targetScreen.classList.add('active');
+            
+            // 화면별 초기화
+            if(screenId === 'enhance-screen') {
+                populateEnhanceScreen();
+            } else if(screenId === 'boss-screen') {
+                initBossSystem();
+            } else if(screenId === 'mastery-screen') {
+                initMasteryTree();
+            } else if(screenId === 'prestige-screen') {
+                initPrestigeScreen();
+            } else if(screenId === 'auto-enhance-screen') {
+                initAutoEnhanceSettings();
+            }
+        }
+    }
+
+    function populateEnhanceScreen() {
+        const listEl = document.getElementById('enhance-item-list');
+        if(!listEl) return;
+        listEl.innerHTML = '';
+        const items = gameState.dimensions[currentDimension].items;
+        const sortedKeys = Object.keys(items).sort((a,b)=>{ const [tA, lA, rA] = a.split('-').map(Number); const [tB, lB, rB] = b.split('-').map(Number); return tB - tA || lB - lA || rB - rA;});
+
+        for(const key of sortedKeys) {
+            const count = Math.floor(items[key]);
+            if (count < 1) continue;
+            const [tier, level, rarity] = key.split('-').map(Number);
+            const itemData = ITEMS[currentDimension][tier];
+            const rarityData = RARITY_CONFIG[rarity];
+            
+            const el = document.createElement('div');
+            el.className = `p-2 rounded-lg cursor-pointer text-center border-2 aspect-square flex flex-col justify-center rarity-${rarityData.name.toLowerCase()}`;
+            el.style.backgroundColor = '#161b22';
+            el.innerHTML = `
+                <div class="font-bold text-sm" style="color:${rarityData.color}">T${tier+1}+${level}</div>
+                <div class="text-xs">${rarityData.name}</div>
+                <div class="text-xs">보유: ${count}</div>
+            `;
+            
+            const requiredCount = currentDimension === 'hephaestus' ? 2.4 : 2;
+            if(count >= requiredCount) {
+                el.onclick = () => {
+                    handleEnhance(currentDimension, {tier, level, rarity});
+                    populateEnhanceScreen();
+                };
+            } else {
+                el.style.opacity = '0.5';
+            }
+            listEl.appendChild(el);
+        }
+    }
+
+    // ===================================================================================
+    // 저장/불러오기
+    // ===================================================================================
+    function saveGame(showMessage = false) {
+        localStorage.setItem('dimensionalRiftSave', JSON.stringify(gameState));
+        gameState.lastSave = Date.now();
+        if (showMessage) {
+            showToast('게임이 저장되었습니다!', 'success');
+        }
+    }
+    
+    function loadGame() {
+        const savedData = localStorage.getItem('dimensionalRiftSave');
+        if (savedData) {
+            try {
+                gameState = JSON.parse(savedData);
+                // 버전 호환성 체크
+                if (!gameState.dimensions) {
+                    gameState = createNewGameState();
+                } else {
+                    // 누락된 속성 추가
+                    for (const dim in DIMENSIONS) {
+                        if (!gameState.dimensions[dim].autoEnhance) {
+                            gameState.dimensions[dim].autoEnhance = {
+                                enabled: false,
+                                targetLevel: 10,
+                                rarityProtection: 2,
+                                minStock: 2,
+                                speed: 1
+                            };
+                        }
+                    }
+                    if (!gameState.player.masteryLevels) {
+                        gameState.player.masteryLevels = {};
+                    }
+                }
+            } catch (e) {
+                console.error('세이브 파일 로드 실패:', e);
+                gameState = createNewGameState();
+            }
+        } else {
+            gameState = createNewGameState();
+        }
+    }
+    
+    function exportSave() {
+        const saveData = btoa(JSON.stringify(gameState));
+        const textarea = document.createElement('textarea');
+        textarea.value = saveData;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('세이브 데이터가 클립보드에 복사되었습니다!', 'success');
+    }
+    
+    function importSave() {
+        const saveData = prompt('세이브 데이터를 입력하세요:');
+        if (saveData) {
+            try {
+                gameState = JSON.parse(atob(saveData));
+                saveGame();
+                location.reload();
+            } catch (e) {
+                showToast('잘못된 세이브 데이터입니다!', 'error');
+            }
+        }
+    }
+    
+    function resetGame() {
+        if (confirm('정말로 게임을 초기화하시겠습니까? 모든 진행상황이 삭제됩니다!')) {
+            localStorage.removeItem('dimensionalRiftSave');
+            gameState = createNewGameState();
+            location.reload();
+        }
+    }
+    
+    function resizeCanvas() {
+        const canvas = document.getElementById('game-canvas');
+        if(!canvas) return;
+        const container = canvas.parentElement;
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
+
+    // ===================================================================================
+    // 이벤트 리스너
+    // ===================================================================================
+    function initEventListeners() {
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            draw();
+        });
+        
+        // 클릭 이벤트
+        document.body.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+
+            // 차원 전환
+            const dimension = button.dataset.dimension;
+            if (dimension) {
+                switchDimension(dimension);
+                return;
+            }
+
+            // 화면 전환
+            const screenId = button.dataset.screenId;
+            if (screenId) {
+                showScreen(screenId);
+                return;
+            }
+
+            // 화면 닫기
+            if (button.classList.contains('screen-close-btn')) {
+                showScreen('main-screen');
+            }
+        });
+
+        // ===========================================
+        // 메인 화면 드래그 앤 드롭 로직 (장착/탈착)
+        // ===========================================
+        let draggedItemData = null;
+        let dragTargetElement = null;
+
+        document.getElementById('main-screen').addEventListener('dragstart', (e) => {
+            const itemElement = e.target.closest('[draggable="true"]');
+            if (!itemElement) return;
+
+            draggedItemData = {
+                key: itemElement.dataset.itemKey,
+                source: itemElement.dataset.source,
+                slotIndex: itemElement.dataset.source === 'slot' ? parseInt(itemElement.dataset.id.replace('slot-', '')) : null
+            };
+            e.dataTransfer.setData('text/plain', 'item');
+            setTimeout(() => { itemElement.style.opacity = '0.5'; }, 0);
+        });
+
+        document.getElementById('main-screen').addEventListener('dragend', (e) => {
+            if (e.target.closest('[draggable="true"]')) {
+                e.target.closest('[draggable="true"]').style.opacity = '1';
+            }
+            draggedItemData = null;
+        });
+
+        document.getElementById('main-screen').addEventListener('dragover', (e) => {
+            const targetElement = e.target.closest('[data-droppable]');
+            if (targetElement) {
+                e.preventDefault();
+            }
+        });
+
+        document.getElementById('main-screen').addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetCell = e.target.closest('[data-droppable]');
+            if (!targetCell || !draggedItemData) return;
+
+            const dim = gameState.dimensions[currentDimension];
+            const itemKey = draggedItemData.key;
+            const item = keyToItem(itemKey);
+
+            if (draggedItemData.source === 'inventory') {
+                // 인벤토리 -> 장착 슬롯
+                const targetSlotIndex = parseInt(targetCell.dataset.slotIndex);
+                if (dim.slots[targetSlotIndex] === null) {
+                    if (removeItem(currentDimension, item, 1)) {
+                        dim.slots[targetSlotIndex] = item;
+                        showToast('아이템을 장착했습니다!', 'success');
+                    }
+                } else {
+                    // 슬롯에 아이템이 있을 경우, 서로 교체
+                    const swappedItem = dim.slots[targetSlotIndex];
+                    if (removeItem(currentDimension, item, 1)) {
+                        dim.slots[targetSlotIndex] = item;
+                        addItem(currentDimension, swappedItem, 1);
+                        showToast('아이템을 교체했습니다!', 'success');
+                    }
+                }
+            } else if (draggedItemData.source === 'slot') {
+                const sourceSlotIndex = draggedItemData.slotIndex;
+                const targetSlotIndex = parseInt(targetCell.dataset.slotIndex);
+                if (sourceSlotIndex === targetSlotIndex) return;
+
+                // 슬롯 간 교체
+                const swappedItem = dim.slots[targetSlotIndex];
+                dim.slots[targetSlotIndex] = dim.slots[sourceSlotIndex];
+                dim.slots[sourceSlotIndex] = swappedItem;
+            }
+
+            updateUI();
+        });
+        
+        // ===========================================
+        // 모바일 터치 이벤트 로직 (장착/탈착)
+        // ===========================================
+        let touchStartItem = null;
+        let touchStartElement = null;
+        let touchDraggingElement = null;
+
+        document.getElementById('main-screen').addEventListener('touchstart', (e) => {
+            const itemElement = e.target.closest('[draggable="true"]');
+            if (!itemElement) return;
+
+            e.preventDefault();
+            
+            touchStartElement = itemElement;
+            touchStartItem = {
+                key: itemElement.dataset.itemKey,
+                source: itemElement.dataset.source,
+                slotIndex: itemElement.dataset.source === 'slot' ? parseInt(itemElement.dataset.id.replace('slot-', '')) : null
+            };
+            
+            touchDraggingElement = itemElement.cloneNode(true);
+            touchDraggingElement.style.position = 'absolute';
+            touchDraggingElement.style.opacity = '0.7';
+            touchDraggingElement.style.pointerEvents = 'none';
+            touchDraggingElement.style.width = itemElement.offsetWidth + 'px';
+            touchDraggingElement.style.height = itemElement.offsetHeight + 'px';
+            document.body.appendChild(touchDraggingElement);
+        });
+
+        document.getElementById('main-screen').addEventListener('touchmove', (e) => {
+            if (!touchDraggingElement) return;
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            touchDraggingElement.style.left = touch.clientX - touchDraggingElement.offsetWidth / 2 + 'px';
+            touchDraggingElement.style.top = touch.clientY - touchDraggingElement.offsetHeight / 2 + 'px';
+        });
+
+        document.getElementById('main-screen').addEventListener('touchend', (e) => {
+            if (!touchDraggingElement) return;
+            
+            const touch = e.changedTouches[0];
+            const targetCell = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-droppable]');
+            
+            if (targetCell) {
+                const dim = gameState.dimensions[currentDimension];
+                const itemKey = touchStartItem.key;
+                const item = keyToItem(itemKey);
+                
+                if (touchStartItem.source === 'inventory') {
+                    // 인벤토리 -> 장착 슬롯
+                    const targetSlotIndex = parseInt(targetCell.dataset.slotIndex);
+                    if (dim.slots[targetSlotIndex] === null) {
+                        if (removeItem(currentDimension, item, 1)) {
+                            dim.slots[targetSlotIndex] = item;
+                            showToast('아이템을 장착했습니다!', 'success');
+                        }
+                    } else {
+                        const swappedItem = dim.slots[targetSlotIndex];
+                        if (removeItem(currentDimension, item, 1)) {
+                            dim.slots[targetSlotIndex] = item;
+                            addItem(currentDimension, swappedItem, 1);
+                            showToast('아이템을 교체했습니다!', 'success');
+                        }
+                    }
+                } else if (touchStartItem.source === 'slot') {
+                    // 슬롯 -> 슬롯
+                    const sourceSlotIndex = touchStartItem.slotIndex;
+                    const targetSlotIndex = parseInt(targetCell.dataset.slotIndex);
+                    if (sourceSlotIndex !== targetSlotIndex) {
+                        const swappedItem = dim.slots[targetSlotIndex];
+                        dim.slots[targetSlotIndex] = dim.slots[sourceSlotIndex];
+                        dim.slots[sourceSlotIndex] = swappedItem;
+                    }
+                }
+                updateUI();
+            }
+
+            document.body.removeChild(touchDraggingElement);
+            touchDraggingElement = null;
+            touchStartItem = null;
+        });
+
+        // 단축키
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                showScreen('main-screen');
+            }
+        });
+    }
+
+    // 아이템 키를 아이템 객체로 변환
+    function keyToItem(key) {
+        const [tier, level, rarity] = key.split('-').map(Number);
+        return { tier, level, rarity };
+    }
+    
+    // ===================================================================================
+    // 초기화
+    // ===================================================================================
+    function init() {
+        loadGame();
+        resizeCanvas();
+        initEventListeners();
+        
+        // 초기 차원 설정
+        switchDimension('gaia');
+        
+        // 게임 루프 시작
+        requestAnimationFrame(gameLoop);
+        setInterval(logicTick, LOGIC_TICK_RATE);
+        
+        // 자동 저장
+        setInterval(() => {
+            if(gameState && gameState.settings.autoSave) {
+                saveGame();
+            }
+        }, SAVE_INTERVAL);
+        
+        // 초기 UI 업데이트
+        updateUI();
+    }
+    
+    // 페이지 로드 시 게임 시작
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
